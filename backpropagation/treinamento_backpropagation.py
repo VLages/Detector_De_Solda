@@ -7,7 +7,7 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader
 
-from features_LE import Features
+from features_LA import FeaturesLA as Features
 
 # ==========================================
 # CONFIGURAÇÕES GERAIS (HIPERPARÂMETROS)
@@ -128,7 +128,7 @@ def preparar_dados_features():
 # CRIAÇÃO DA ARQUITETURA (MULTILAYER PERCEPTRON - MLP)
 # ==========================================
 class MLPSolda(nn.Module):
-    def __init__(self, input_size=5, num_classes=3):
+    def __init__(self, input_size=6, num_classes=3):
         super(MLPSolda, self).__init__()
         
         self.rede = nn.Sequential(
@@ -153,7 +153,7 @@ if __name__ == "__main__":
     print(f"Dataset pronto: {total_dados} amostras tabulares para treinamento.")
 
     # Instancia o Cérebro Tabular com 7 Features
-    modelo = MLPSolda(input_size=5, num_classes=NUM_CLASSES).to(device)
+    modelo = MLPSolda(input_size=6, num_classes=NUM_CLASSES).to(device)
     
     criterio = nn.CrossEntropyLoss()
     otimizador = optim.Adam(modelo.parameters(), lr=LEARNING_RATE)

@@ -11,7 +11,7 @@ if CAMINHO_RAIZ not in sys.path:
 
 from backpropagation.enhancement_LE import Enhancement
 from backpropagation.dataset_builder import FusionWeldAugmentation
-from backpropagation.features_LE import Features
+from backpropagation.features_LA import FeaturesLA as Features
 from quality_classification import QualityClassification
 
 HERE = os.path.dirname(os.path.abspath(__file__))

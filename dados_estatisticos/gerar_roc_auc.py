@@ -25,7 +25,7 @@ for caminho in [CAMINHO_RAIZ, CAMINHO_BP, CAMINHO_RF, CAMINHO_YL]:
 
 
 from backpropagation.enhancement_LE import Enhancement
-from backpropagation.features_LE import Features
+from backpropagation.features_LA import FeaturesLA as Features
 from random_forest.quality_classification import QualityClassification
 from yolov8.detector_yolo import ExtratorCordaoYOLO
 
@@ -33,7 +33,7 @@ from yolov8.detector_yolo import ExtratorCordaoYOLO
 # ARQUITETURA DA MLP
 # ==========================================
 class MLPSolda(nn.Module):
-    def __init__(self, input_size=5, num_classes=3):
+    def __init__(self, input_size=6, num_classes=3):
         super(MLPSolda, self).__init__()
         self.rede = nn.Sequential(
             nn.Linear(input_size, 32),

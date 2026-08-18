@@ -3,7 +3,7 @@ import pandas as pd
 import joblib
 from sklearn.ensemble import RandomForestClassifier
 
-from backpropagation.features_LE import Features
+from backpropagation.features_LA import FeaturesLA as Features
 
 
 class QualityClassification:
@@ -14,7 +14,7 @@ class QualityClassification:
             random_state=random_state,
             class_weight="balanced",
         )
-        self.feature_names = list(Features.FEATURE_COLUMNS)
+        self.feature_names = None
         self.classes_ = None
         self.class_profiles_ = None  
 
@@ -29,6 +29,8 @@ class QualityClassification:
 
     # ---------- treino ----------
     def fit(self, X, y):
+        if self.feature_names is None and isinstance(X, pd.DataFrame):
+            self.feature_names = list(X.columns)
         Xm = self._as_matrix(X)
         y = np.asarray(y)
         self.model.fit(Xm, y)

@@ -23,7 +23,7 @@ if CAMINHO_RF not in sys.path:
 
 # Importando o pipeline completo
 from backpropagation.enhancement_LE import Enhancement
-from backpropagation.features_LE import Features
+from backpropagation.features_LA import FeaturesLA as Features
 from yolov8.detector_yolo import ExtratorCordaoYOLO
 
 # Importando a classe do Random Forest
@@ -33,7 +33,7 @@ from random_forest.quality_classification import QualityClassification
 # ARQUITETURA DA REDE MLP
 # ==========================================
 class MLPSolda(nn.Module):
-    def __init__(self, input_size=5, num_classes=3):
+    def __init__(self, input_size=6, num_classes=3):
         super(MLPSolda, self).__init__()
         self.rede = nn.Sequential(
             nn.Linear(input_size, 32),
@@ -72,18 +72,33 @@ TEXT_MUT  = "#8DA6CC"
 BORDER    = "#1E3C68"
 
 SWATCH = {
-    "pct_azul":   "#4F9DF7", "pct_cinza":  "#9AA7B8",
-    "pct_verde":  "#34D399", "pct_marrom": "#B5743A",
-    "pct_roxo":   "#A78BFA", "valor":      "#F5D67B",
+    "pct_azul":   "#4F9DF7", 
+    "pct_cinza":  "#9AA7B8",
+    "pct_verde":  "#34D399", 
+    "pct_marrom": "#B5743A",
+    "pct_roxo":   "#A78BFA", 
+    "valor":      "#F5D67B",
     "saturacao":  "#2DD4BF",
+    "pct_amarelo_palha":   "#FDE047", # Amarelo vibrante/palha
+    "pct_marrom_vermelho": "#9A3412", # Marrom avermelhado escuro
+    "h_mean":              "#F472B6", # Rosa/Magenta (Apenas para a barra)
+    "h_std":               "#C084FC"  # Roxo claro (Apenas para a barra)
 }
 
 LABEL_PT = {
-    "pct_azul": "Azul", "pct_cinza": "Cinza/Prata", "pct_verde": "Verde",
-    "pct_marrom": "Marrom/Vermelho", "pct_roxo": "Roxo",
-    "valor": "Brilho (Luz)", "saturacao": "Saturação",
-}
+    "pct_azul": "Azul", 
+    "pct_cinza": "Cinza/Prata", 
+    "pct_verde": "Verde",
+    "pct_marrom": "Marrom Clássico", 
+    "pct_roxo": "Roxo",
+    "valor": "Brilho (Luz)", 
+    "saturacao": "Saturação",
+    "pct_amarelo_palha": "Amarelo Palha",
+    "pct_marrom_vermelho": "Marrom/Vermelho",
+    "h_mean": "Matiz Médio (H)",
+    "h_std": "Desvio do Matiz"
 
+}
 LABELS_MLP = [
     "Nível 0 (Sem Oxidação)", 
     "Aceitável (Níveis 1 a 4)", 
@@ -160,7 +175,7 @@ class GUI:
                                    f"O arquivo {self.model_path} não existe.\nRode o treinamento primeiro.")
         else:
             try:
-                self.modelo_mlp = MLPSolda(input_size=5, num_classes=3)
+                self.modelo_mlp = MLPSolda(input_size=6, num_classes=3)
                 self.modelo_mlp.load_state_dict(torch.load(self.model_path, map_location=self.device, weights_only=True))
                 self.modelo_mlp.eval()
                 self.modelo_mlp.to(self.device)

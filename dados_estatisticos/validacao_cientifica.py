@@ -23,7 +23,7 @@ for caminho in [CAMINHO_RAIZ, CAMINHO_BP, CAMINHO_RF, CAMINHO_YL]:
         sys.path.append(caminho)
 
 from backpropagation.enhancement_LE import Enhancement
-from backpropagation.features_LE import Features
+from backpropagation.features_LA import FeaturesLA as Features
 from random_forest.quality_classification import QualityClassification
 from yolov8.detector_yolo import ExtratorCordaoYOLO
 
@@ -31,7 +31,7 @@ from yolov8.detector_yolo import ExtratorCordaoYOLO
 # ARQUITETURA DA MLP (Cópia Exata)
 # ==========================================
 class MLPSolda(nn.Module):
-    def __init__(self, input_size=5, num_classes=3):
+    def __init__(self, input_size=6, num_classes=3):
         super(MLPSolda, self).__init__()
         self.rede = nn.Sequential(
             nn.Linear(input_size, 32),
@@ -73,7 +73,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # 2. Carregando os Modelos
-    modelo_mlp = MLPSolda(input_size=5, num_classes=3).to(device)
+    modelo_mlp = MLPSolda(input_size=6, num_classes=3).to(device)
     modelo_mlp.load_state_dict(torch.load(MODELO_MLP_PATH, map_location=device, weights_only=True))
     modelo_mlp.eval()
     
@@ -127,12 +127,27 @@ def main():
             _, pred_mlp = torch.max(saida_mlp, 1)
             y_pred_mlp.append(pred_mlp.item())
 
-        # --- AVALIAÇÃO RANDOM FOREST ---
-        ppm_chutado_rf = int(modelo_rf.predict(features_dict)[0])
-        macro_pred_rf = ppm_para_macro(ppm_chutado_rf)
-        y_pred_rf.append(macro_pred_rf)
+        # --- AVALIAÇÃO RANDOM FOREST (SOMA DE PROBABILIDADES) ---
+        # Extrai as porcentagens (probabilidades) de todos os 11 níveis originais
+        probs_rf_originais = modelo_rf.predict_proba(features_dict)[0]
+        probs_rf_macro = [0.0, 0.0, 0.0]
         
-        # Salvamos o gabarito apenas se o pipeline rodou até o fim para essa imagem
+        # Distribui as probabilidades nos 3 baldes de Macro-Classes
+        for idx, cls_label in enumerate(modelo_rf.classes_):
+            try:
+                cls_val = int(cls_label)
+                if cls_val == 0:
+                    probs_rf_macro[0] += probs_rf_originais[idx]
+                elif cls_val <= 100:
+                    probs_rf_macro[1] += probs_rf_originais[idx]
+                else:
+                    probs_rf_macro[2] += probs_rf_originais[idx]
+            except ValueError:
+                pass
+                
+        # A decisão final da matriz será o "balde" que acumulou a maior probabilidade total
+        macro_pred_rf = int(np.argmax(probs_rf_macro))
+        y_pred_rf.append(macro_pred_rf)
         y_verdadeiro.append(macro_real)
 
     # ==========================================
