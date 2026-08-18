@@ -1,0 +1,12 @@
+.vscode/
+pycache/
+*.pyc
+*.pyo
+*.pyd
+runs/
+yolov8/runs/
+features_aumentadas.csv
+features_base.csv
+comparativo_curvas_roc.png
+comparativo_matrizes_confusao.png
+comparativo_importancia_variaveis.png

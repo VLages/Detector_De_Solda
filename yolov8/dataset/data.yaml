@@ -1,0 +1,13 @@
+train: ../train/images
+val: ../valid/images
+test: ../test/images
+
+nc: 1
+names: ['soldas']
+
+roboflow:
+  workspace: araras
+  project: soldas-hv1jn
+  version: 1
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/araras/soldas-hv1jn/dataset/1
