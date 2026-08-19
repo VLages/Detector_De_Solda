@@ -50,13 +50,13 @@ class MLPSolda(nn.Module):
 # ==========================================
 # CONFIGURAÇÕES
 # ==========================================
-PASTA_TESTES = r"D:\Lages\Detector_De_Solda\banco_de_dados\base_GasPurga"
+PASTA_TESTES = r"D:\Lages\Detector_De_Solda\banco_de_dados\base_GasPurga_balanceada"
 MODELO_MLP_PATH = "modelos_treinados/modelo_mlp_features_solda.pth"
 MODELO_RF_PATH = "modelos_treinados/modelo.joblib"
 MODELO_YOLO_PATH = "modelos_treinados/yolov8n_solda.pt"
 
-LABELS_MACRO = ["Classe 0 (Limpa)", "Classe 1 (Aceitável)", "Classe 2 (Inaceitável)"]
-N_CLASSES = 3
+LABELS_MACRO = ["Classe 1 (Aceitável)", "Classe 2 (Inaceitável)"]
+N_CLASSES = 2
 
 def ppm_para_macro(ppm):
     if ppm <= 100: return 0
@@ -85,9 +85,13 @@ def main():
     for caminho in caminhos:
         nome_arquivo = os.path.basename(caminho)
         busca = re.search(r'g(\d+)-', nome_arquivo, re.IGNORECASE)
-        if not busca: continue
+        if not busca:
+            print(f"[Aviso] Ignorando {nome_arquivo}")
+            continue
             
         ppm_real = int(busca.group(1))
+        if ppm_real == 0:
+            continue
         y_verdadeiro.append(ppm_para_macro(ppm_real))
 
         img_bruta = cv2.imread(caminho)
@@ -105,21 +109,24 @@ def main():
             probs_mlp = F.softmax(saida_mlp, dim=1)[0].cpu().numpy()
             probabilidades_mlp.append(probs_mlp)
 
-        # Probabilidades RF (Traduzindo 11 classes para 3)
+        # Probabilidades RF (Traduzindo as 11 classes originais para as 2 Macro)
         probs_rf_originais = modelo_rf.predict_proba(features_dict)[0]
-        probs_rf_macro = [0.0, 0.0, 0.0]
+        probs_rf_macro = [0.0, 0.0]
+        
         for idx, cls_label in enumerate(modelo_rf.classes_):
             try:
                 cls_val = int(cls_label)
-                if cls_val == 0: probs_rf_macro[0] += probs_rf_originais[idx]
-                elif cls_val <= 100: probs_rf_macro[1] += probs_rf_originais[idx]
-                else: probs_rf_macro[2] += probs_rf_originais[idx]
+                if cls_val <= 100:
+                    probs_rf_macro[0] += probs_rf_originais[idx]
+                else:
+                    probs_rf_macro[1] += probs_rf_originais[idx]
             except ValueError:
                 pass
+                
         probabilidades_rf.append(probs_rf_macro)
 
-    # Binarizando os labels reais para plotagem multiclasse (One-vs-Rest)
-    Y_bin = label_binarize(y_verdadeiro, classes=[0, 1, 2])
+    # Binarizando os labels reais para plotagem (Garante o formato N x 2 para o gráfico)
+    Y_bin = np.eye(2)[y_verdadeiro]
     Y_score_mlp = np.array(probabilidades_mlp)
     Y_score_rf = np.array(probabilidades_rf)
 
@@ -151,7 +158,7 @@ def main():
     # PLOTAGEM DOS GRÁFICOS (Lado a Lado)
     # ==========================================
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 7))
-    cores = cycle(['#22C55E', '#F5C542', '#EF4444']) # Verde, Amarelo, Vermelho
+    cores = cycle(['#22C55E', '#EF4444']) # Verde, Amarelo, Vermelho
 
     def plotar_curvas(ax, fpr, tpr, roc_auc, titulo):
         for i, cor in zip(range(N_CLASSES), cores):

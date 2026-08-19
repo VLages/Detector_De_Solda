@@ -27,7 +27,6 @@ def label_from_filename(path: str) -> int:
         raise ValueError(f"Sem numero no nome do arquivo: {path}")
     return int(m.group())
 
-
 def load_dataset(images_dir: str):
     paths = sorted(
         glob.glob(os.path.join(images_dir, "*.png"))
@@ -48,6 +47,12 @@ def load_dataset(images_dir: str):
         names.append(os.path.basename(p))
     return images, labels, names
 
+def ppm_para_macro(ppm):
+    """Traduz o PPM exato para as 2 Macro-Classes (Binário)"""
+    if ppm <= 100:
+        return 0  # Índice 0: Aceitável
+    else:
+        return 1  # Índice 1: Inaceitável
 
 def main():
     print("1) Carregando imagens...")
@@ -58,10 +63,27 @@ def main():
     enhancer = Enhancement()
     enhanced = [enhancer.enhance(im) for im in images]
 
-    print("3) Data augmentation (cada imagem -> 10)...")
-    augmenter = FusionWeldAugmentation(crop_size=(224, 224), n_crops_per_image=10, seed=42)
-    aug_imgs, aug_labels = augmenter.augment_dataset(enhanced, labels)
-    print(f"   total apos aumento: {len(aug_imgs)} imagens robustas geradas")
+    print("3) Data augmentation (Balanceamento de Classes)...")
+    aug_imgs = []
+    aug_labels = []
+
+    # Criamos dois motores de augmentation com multiplicadores diferentes
+    aug_aceitavel = FusionWeldAugmentation(crop_size=(224, 224), n_crops_per_image=15, seed=42)
+    aug_inaceitavel = FusionWeldAugmentation(crop_size=(224, 224), n_crops_per_image=10, seed=42)
+
+    for img, lbl_ppm in zip(enhanced, labels):
+        if lbl_ppm <= 100:
+            novas_imgs, novas_labels = aug_aceitavel.augment_dataset([img], [lbl_ppm])
+        else:
+            novas_imgs, novas_labels = aug_inaceitavel.augment_dataset([img], [lbl_ppm])
+
+        aug_imgs.extend(novas_imgs)
+        aug_labels.extend(novas_labels)
+
+    qtd_aceitaveis = sum(1 for lbl in aug_labels if lbl <= 100)
+    qtd_inaceitaveis = sum(1 for lbl in aug_labels if lbl > 100)
+
+    print(f"   Total apos aumento: {len(aug_imgs)} imagens balanceadas ({qtd_aceitaveis} Aceitáveis vs {qtd_inaceitaveis} Inaceitáveis)")    
 
     print("4) Extraindo parametros HSV (Features)...")
     feat = Features()

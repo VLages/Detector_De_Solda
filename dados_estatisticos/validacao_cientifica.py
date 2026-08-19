@@ -48,7 +48,7 @@ class MLPSolda(nn.Module):
 # ==========================================
 # CONFIGURAÇÕES DE CAMINHO
 # ==========================================
-PASTA_TESTES = r"D:\Lages\Detector_De_Solda\banco_de_dados\base_GasPurga" # <-- COLOQUE AQUI A SUA PASTA DE TESTES
+PASTA_TESTES = r"D:\Lages\Detector_De_Solda\banco_de_dados\base_GasPurga_balanceada" # <-- COLOQUE AQUI A SUA PASTA DE TESTES
 MODELO_MLP_PATH = "modelos_treinados/modelo_mlp_features_solda.pth"
 MODELO_RF_PATH = "modelos_treinados/modelo.joblib"
 MODELO_YOLO_PATH = "modelos_treinados/yolov8n_solda.pt" # <-- Caminho do YOLO
@@ -96,10 +96,12 @@ def main():
         
         busca = re.search(r'g(\d+)-', nome_arquivo, re.IGNORECASE)
         if not busca:
-            print(f"[Aviso] Ignorando {nome_arquivo} (Não segue o padrão g[PPM]-[Num])")
+            print(f"[Aviso] Ignorando {nome_arquivo}")
             continue
             
         ppm_real = int(busca.group(1))
+        if ppm_real == 0:
+            continue
         macro_real = ppm_para_macro(ppm_real)
         
         # Leitura da imagem bruta
@@ -130,6 +132,7 @@ def main():
         probs_rf_originais = modelo_rf.predict_proba(features_dict)[0]
         probs_rf_macro = [0.0, 0.0] 
         
+        # O modelo .joblib tem 11 classes, precisamos agrupar nos 2 baldes!
         for idx, cls_label in enumerate(modelo_rf.classes_):
             try:
                 cls_val = int(cls_label)
@@ -140,11 +143,12 @@ def main():
             except ValueError:
                 pass
                 
+        # Agora sim a decisão será apenas 0 ou 1
         macro_pred_rf = int(np.argmax(probs_rf_macro))
         y_pred_rf.append(macro_pred_rf)
+
         y_verdadeiro.append(macro_real)
 
-    # ==========================================
     # CÁLCULO DAS MÉTRICAS CIENTÍFICAS
     # ==========================================
     acc_mlp = accuracy_score(y_verdadeiro, y_pred_mlp)

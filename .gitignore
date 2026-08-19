@@ -11,4 +11,4 @@ comparativo_curvas_roc.png
 comparativo_matrizes_confusao.png
 comparativo_importancia_variaveis.png
 backpropagation/imagens_geradas/
-aug_[0-9][0-9][0-9][0-9]_classe_*.png
+aug_*.png
