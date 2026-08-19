@@ -33,7 +33,7 @@ from random_forest.quality_classification import QualityClassification
 # ARQUITETURA DA REDE MLP
 # ==========================================
 class MLPSolda(nn.Module):
-    def __init__(self, input_size=6, num_classes=3):
+    def __init__(self, input_size=6, num_classes=2):
         super(MLPSolda, self).__init__()
         self.rede = nn.Sequential(
             nn.Linear(input_size, 32),
@@ -100,7 +100,6 @@ LABEL_PT = {
 
 }
 LABELS_MLP = [
-    "Nível 0 (Sem Oxidação)", 
     "Aceitável (Níveis 1 a 4)", 
     "Inaceitável (Níveis 5 a 10)"
 ]
@@ -112,8 +111,7 @@ def lerp(c1, c2, t):
     return f"#{r[0]:02x}{r[1]:02x}{r[2]:02x}"
 
 def severity_color(level):
-    if level == 0: return "#39A0F5"
-    if level == 1: return "#22C55E"
+    if level == 0: return "#22C55E"
     return "#EF4444"
 
 def round_rect(canvas, x1, y1, x2, y2, r, **kw):
@@ -175,7 +173,7 @@ class GUI:
                                    f"O arquivo {self.model_path} não existe.\nRode o treinamento primeiro.")
         else:
             try:
-                self.modelo_mlp = MLPSolda(input_size=6, num_classes=3)
+                self.modelo_mlp = MLPSolda(input_size=6, num_classes=2)
                 self.modelo_mlp.load_state_dict(torch.load(self.model_path, map_location=self.device, weights_only=True))
                 self.modelo_mlp.eval()
                 self.modelo_mlp.to(self.device)
@@ -321,21 +319,27 @@ class GUI:
         self._draw_badge(None)
         self._draw_conf(0.0)
 
-    def _draw_badge(self, level_num):
+    def _draw_badge(self, level_num, custom_color=None, custom_text=None):
         c = self.badge
         c.delete("all")
         cx, cy, r = 84, 84, 70
-        col = "#33425E" if level_num is None else severity_color(level_num)
+        
+        # Se receber uma cor customizada (caso do Metal Limpo)
+        if custom_color is not None:
+            col = custom_color
+            texto = custom_text
+        # Caso padrão da IA
+        else:
+            col = "#33425E" if level_num is None else severity_color(level_num)
+            texto = "?"
+            if level_num == 0: texto = "OK\nAceita"
+            elif level_num == 1: texto = "X\nFalhou"
+            
         ring = lerp(col, "#FFFFFF", 0.18)
         
         c.create_oval(cx-r-5, cy-r-5, cx+r+5, cy+r+5, fill=ring, outline="")
         c.create_oval(cx-r, cy-r, cx+r, cy+r, fill=col, outline="")
         
-        texto = "?"
-        if level_num == 0: texto = "OK\nLimpa"
-        elif level_num == 1: texto = "OK\nAceita"
-        elif level_num == 2: texto = "X\nFalhou"
-            
         c.create_text(cx, cy, text=texto, fill="white", font=self.f_med, justify="center")
 
     def _draw_conf(self, frac):
@@ -372,12 +376,25 @@ class GUI:
             tk.Label(rf, text=LABEL_PT[key], bg=bg, fg=TEXT, font=self.f_text).grid(row=0, column=1, sticky="w", padx=6)
             
             val = 0.0 if row_data is None else row_data[key]
-            tk.Label(rf, text=f"{val:5.1f} %", bg=bg, fg=TEXT, font=self.f_text).grid(row=0, column=2, sticky="e", padx=6)
+            
+            # ==========================================
+            # CORREÇÃO: TRATAMENTO DO MATIZ (H) VS PORCENTAGENS
+            # ==========================================
+            if key in ["h_mean", "h_std"]:
+                texto_valor = f"{val:5.1f}"    # Remove o símbolo de %
+                razao_barra = val / 179.0      # O limite máximo do Hue no OpenCV é 179
+            else:
+                texto_valor = f"{val:5.1f} %"  # Mantém a porcentagem normal
+                razao_barra = val / 100.0      # Limite normal é 100%
+
+            tk.Label(rf, text=texto_valor, bg=bg, fg=TEXT, font=self.f_text).grid(row=0, column=2, sticky="e", padx=6)
             
             bar = tk.Canvas(rf, width=self.BAR_W, height=self.BAR_H, bg=bg, highlightthickness=0)
             bar.grid(row=0, column=3, sticky="e", padx=(6, 8))
             round_rect(bar, 0, 1, self.BAR_W, self.BAR_H-1, (self.BAR_H-2)/2, fill=TRACK, outline="")
-            fw = max(3, int(self.BAR_W * min(val/100.0, 1.0)))
+            
+            # Calcula a largura da barra usando a razão definida acima (travada no máximo de 1.0)
+            fw = max(3, int(self.BAR_W * min(razao_barra, 1.0)))
             round_rect(bar, 0, 1, fw, self.BAR_H-1, (self.BAR_H-2)/2, fill=sw, outline="")
 
     def _build_charts(self, body):
@@ -452,15 +469,38 @@ class GUI:
             messagebox.showerror("Erro", "Não foi possivel ler a imagem.")
             return
 
-        # 1. YOLO tenta detectar TODAS as soldas na imagem
+        # 1. YOLO tenta detectar as soldas
         img_anotada, recortes = self.yolo.detectar_e_recortar(img_original, padding_ratio=0.05)
         
-        # FALLBACK: SE O YOLO NÃO ACHAR NADA
+        # ==========================================
+        # FALLBACK: METAL BASE LIMPO (SEM SOLDA)
+        # ==========================================
         if not recortes:
-            recortes = [{'id': 1, 'imagem': img_original.copy()}]
-            cv2.putText(img_anotada, "Nao foi detectado\n cordões de solda", 
-                        (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 
-                        0.8, (0, 255, 255), 2, cv2.LINE_AA)
+            # Avisos visuais na foto
+            cv2.putText(img_anotada, "Nao foi detectado", (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(img_anotada, "cordoes de solda", (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 255), 2, cv2.LINE_AA)
+            self._show_image(img_anotada)
+            
+            # Desativa navegação de múltiplas soldas
+            self.resultados_atuais = []
+            self.nav_frame.pack_forget()
+            
+            # Interface: Bolinha Azul e Textos
+            self._draw_badge(level_num=None, custom_color="#39A0F5", custom_text="Metal\nLimpo")
+            self.level_lbl.configure(text="Sem Cordão (Metal Base)")
+            self.conf_lbl.configure(text="-")
+            self._draw_conf(0.0)
+            
+            # Interface: Zera a Tabela de Features
+            self._build_table(self.tab_body, None)
+            
+            # Interface: Limpa o gráfico do matplotlib
+            self.ax_prob.clear()
+            self._style_axes()
+            self.fig_canvas.draw()
+            
+            # Interrompe o processamento (A MLP e o Random Forest não serão acionados)
+            return
             
         self._show_image(img_anotada)
 
@@ -492,22 +532,21 @@ class GUI:
 
             # --- 2B. AVALIAÇÃO DO RANDOM FOREST ---
             classe_rf, conf_rf = 0, 0.0
-            probs_rf = [0.0, 0.0, 0.0]
+            probs_rf = [0.0, 0.0]
             if self.modelo_rf is not None:
                 probs_rf_arr = self.modelo_rf.predict_proba(row)[0]
                 
-                # TRADUTOR DE CLASSES: O RF da chefe tem 11 classes, mas nossa interface mostra 3.
-                if len(probs_rf_arr) > 3:
-                    macro_probs = [0.0, 0.0, 0.0]
+                # TRADUTOR DE CLASSES BINÁRIO
+                if len(probs_rf_arr) > 2:
+                    macro_probs = [0.0, 0.0]
                     for idx, cls_label in enumerate(self.modelo_rf.classes_):
                         try:
-                            cls_val = int(cls_label) # Extrai se é PPM 0, 10, 50, etc.
-                            if cls_val == 0:
+                            cls_val = int(cls_label)
+                            # Menor ou igual a 100 é Aceitável, o resto é Inaceitável
+                            if cls_val <= 100:
                                 macro_probs[0] += probs_rf_arr[idx]
-                            elif cls_val <= 100:
-                                macro_probs[1] += probs_rf_arr[idx]
                             else:
-                                macro_probs[2] += probs_rf_arr[idx]
+                                macro_probs[1] += probs_rf_arr[idx]
                         except ValueError:
                             pass
                     probs_rf = macro_probs
@@ -549,7 +588,7 @@ class GUI:
         
         # Converte para porcentagem de forma segura (funciona para Tensor e Float do RF)
         probs = [float(p) * 100 for p in probabilidades] 
-        colors = ["#39A0F5", "#22C55E", "#EF4444"]
+        colors = [ "#22C55E", "#EF4444"]
         
         self.ax_prob.barh(LABELS_MLP, probs, color=colors)
         

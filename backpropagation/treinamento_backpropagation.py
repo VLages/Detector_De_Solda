@@ -12,7 +12,7 @@ from features_LA import FeaturesLA as Features
 # ==========================================
 # CONFIGURAÇÕES GERAIS (HIPERPARÂMETROS)
 # ==========================================
-NUM_CLASSES = 3          # Usando as 3 Macro-Classes (Aceitável vs Inaceitável)
+NUM_CLASSES = 2          # Usando as 3 Macro-Classes (Aceitável vs Inaceitável)
 EPOCHS = 100              # Redes tabulares precisam de mais épocas, mas treinam em milissegundos
 BATCH_SIZE = 16
 LEARNING_RATE = 0.005    # Taxa de aprendizado um pouco maior para MLPs
@@ -110,6 +110,9 @@ def preparar_dados_features():
             
         label = int(busca_classe.group(1))
 
+        if label <= 1: label = 0
+        else: label = 1
+
         # Extrai o dicionário de cores original
         feat_dict = extrator_hsv.extract(img)
         
@@ -128,7 +131,7 @@ def preparar_dados_features():
 # CRIAÇÃO DA ARQUITETURA (MULTILAYER PERCEPTRON - MLP)
 # ==========================================
 class MLPSolda(nn.Module):
-    def __init__(self, input_size=6, num_classes=3):
+    def __init__(self, input_size=6, num_classes=2):
         super(MLPSolda, self).__init__()
         
         self.rede = nn.Sequential(

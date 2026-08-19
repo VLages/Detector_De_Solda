@@ -22,13 +22,15 @@ MODELO_RF_PATH = "modelos_treinados/modelo.joblib"
 
 # Dicionário para traduzir os nomes técnicos para o gráfico do artigo
 TRADUCAO_FEATURES = {
-    "pct_azul": "Azul", 
-    "pct_cinza": "Cinza/Prata", 
-    "pct_verde": "Verde",
-    "pct_marrom": "Marrom/Vermelho", 
-    "pct_roxo": "Roxo",
-    "valor": "Brilho (Luz)", 
-    "saturacao": "Saturação"
+    "pct_azul":   "Azul", 
+    "pct_cinza":  "Cinza", 
+    "pct_verde":  "Verde",
+    "pct_marrom": "Marrom", 
+    "pct_roxo":   "Roxo",
+    "valor":      "Brilho (Luz)", 
+    "saturacao":  "Saturação",
+    "h_mean":     "Média do Matiz", 
+    "h_std":      "Desvio Padrão do Matiz"
 }
 
 def main():

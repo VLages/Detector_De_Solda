@@ -31,7 +31,7 @@ from yolov8.detector_yolo import ExtratorCordaoYOLO
 # ARQUITETURA DA MLP (Cópia Exata)
 # ==========================================
 class MLPSolda(nn.Module):
-    def __init__(self, input_size=6, num_classes=3):
+    def __init__(self, input_size=6, num_classes=2):
         super(MLPSolda, self).__init__()
         self.rede = nn.Sequential(
             nn.Linear(input_size, 32),
@@ -53,13 +53,12 @@ MODELO_MLP_PATH = "modelos_treinados/modelo_mlp_features_solda.pth"
 MODELO_RF_PATH = "modelos_treinados/modelo.joblib"
 MODELO_YOLO_PATH = "modelos_treinados/yolov8n_solda.pt" # <-- Caminho do YOLO
 
-LABELS_MACRO = ["Nível 0\n(Limpa)", "Nível 1 a 4\n(Aceitável)", "Nível 5 a 10\n(Inaceitável)"]
+LABELS_MACRO = ["Nível 1 a 4\n(Aceitável)", "Nível 5 a 10\n(Inaceitável)"]
 
 def ppm_para_macro(ppm):
     """Traduz o PPM exato para as 3 Macro-Classes do projeto"""
-    if ppm == 0: return 0
-    elif ppm <= 100: return 1
-    else: return 2
+    if ppm <= 100: return 0
+    else: return 1
 
 def main():
     print("="*50)
@@ -73,7 +72,7 @@ def main():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
     # 2. Carregando os Modelos
-    modelo_mlp = MLPSolda(input_size=6, num_classes=3).to(device)
+    modelo_mlp = MLPSolda(input_size=6, num_classes=2).to(device)
     modelo_mlp.load_state_dict(torch.load(MODELO_MLP_PATH, map_location=device, weights_only=True))
     modelo_mlp.eval()
     
@@ -128,24 +127,19 @@ def main():
             y_pred_mlp.append(pred_mlp.item())
 
         # --- AVALIAÇÃO RANDOM FOREST (SOMA DE PROBABILIDADES) ---
-        # Extrai as porcentagens (probabilidades) de todos os 11 níveis originais
         probs_rf_originais = modelo_rf.predict_proba(features_dict)[0]
-        probs_rf_macro = [0.0, 0.0, 0.0]
+        probs_rf_macro = [0.0, 0.0] 
         
-        # Distribui as probabilidades nos 3 baldes de Macro-Classes
         for idx, cls_label in enumerate(modelo_rf.classes_):
             try:
                 cls_val = int(cls_label)
-                if cls_val == 0:
+                if cls_val <= 100:
                     probs_rf_macro[0] += probs_rf_originais[idx]
-                elif cls_val <= 100:
-                    probs_rf_macro[1] += probs_rf_originais[idx]
                 else:
-                    probs_rf_macro[2] += probs_rf_originais[idx]
+                    probs_rf_macro[1] += probs_rf_originais[idx]
             except ValueError:
                 pass
                 
-        # A decisão final da matriz será o "balde" que acumulou a maior probabilidade total
         macro_pred_rf = int(np.argmax(probs_rf_macro))
         y_pred_rf.append(macro_pred_rf)
         y_verdadeiro.append(macro_real)
@@ -160,19 +154,20 @@ def main():
     print("MÉTRICAS DA REDE NEURAL (MLP)")
     print("="*50)
     print(f"Acurácia Global: {acc_mlp * 100:.2f}%")
-    print(classification_report(y_verdadeiro, y_pred_mlp, target_names=[l.replace('\n', ' ') for l in LABELS_MACRO], zero_division=0))
+    print(classification_report(y_verdadeiro, y_pred_mlp, labels=[0, 1], target_names=[l.replace('\n', ' ') for l in LABELS_MACRO], zero_division=0))
 
     print("\n" + "="*50)
     print("MÉTRICAS DO RANDOM FOREST")
     print("="*50)
     print(f"Acurácia Global: {acc_rf * 100:.2f}%")
-    print(classification_report(y_verdadeiro, y_pred_rf, target_names=[l.replace('\n', ' ') for l in LABELS_MACRO], zero_division=0))
+    print(classification_report(y_verdadeiro, y_pred_rf, labels=[0, 1], target_names=[l.replace('\n', ' ') for l in LABELS_MACRO], zero_division=0))
 
     # ==========================================
     # GERAÇÃO DAS MATRIZES DE CONFUSÃO (GRÁFICOS)
     # ==========================================
-    matriz_mlp = confusion_matrix(y_verdadeiro, y_pred_mlp, labels=[0, 1, 2])
-    matriz_rf = confusion_matrix(y_verdadeiro, y_pred_rf, labels=[0, 1, 2])
+    # As matrizes agora são 2x2 (Binárias)
+    matriz_mlp = confusion_matrix(y_verdadeiro, y_pred_mlp, labels=[0, 1])
+    matriz_rf = confusion_matrix(y_verdadeiro, y_pred_rf, labels=[0, 1])
 
     fig, eixos = plt.subplots(1, 2, figsize=(14, 6))
 

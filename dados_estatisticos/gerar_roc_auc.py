@@ -33,7 +33,7 @@ from yolov8.detector_yolo import ExtratorCordaoYOLO
 # ARQUITETURA DA MLP
 # ==========================================
 class MLPSolda(nn.Module):
-    def __init__(self, input_size=6, num_classes=3):
+    def __init__(self, input_size=6, num_classes=2):
         super(MLPSolda, self).__init__()
         self.rede = nn.Sequential(
             nn.Linear(input_size, 32),
@@ -59,9 +59,8 @@ LABELS_MACRO = ["Classe 0 (Limpa)", "Classe 1 (Aceit√°vel)", "Classe 2 (Inaceit√
 N_CLASSES = 3
 
 def ppm_para_macro(ppm):
-    if ppm == 0: return 0
-    elif ppm <= 100: return 1
-    else: return 2
+    if ppm <= 100: return 0
+    else: return 1
 
 def main():
     print("Extraindo probabilidades para as Curvas ROC...")
