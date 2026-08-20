@@ -9,12 +9,8 @@ import torch.nn.functional as F
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve, auc
-from sklearn.preprocessing import label_binarize
 from itertools import cycle
 
-# ==========================================
-# TRUQUE DE CAMINHO PARA O JOBLIB
-# ==========================================
 CAMINHO_RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 CAMINHO_BP = os.path.join(CAMINHO_RAIZ, 'backpropagation')
 CAMINHO_RF = os.path.join(CAMINHO_RAIZ, 'random_forest')

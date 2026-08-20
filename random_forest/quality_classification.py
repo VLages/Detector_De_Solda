@@ -3,9 +3,6 @@ import pandas as pd
 import joblib
 from sklearn.ensemble import RandomForestClassifier
 
-from backpropagation.features_LA import FeaturesLA as Features
-
-
 class QualityClassification:
     def __init__(self, n_estimators: int = 300, max_depth=None, random_state: int = 42):
         self.model = RandomForestClassifier(

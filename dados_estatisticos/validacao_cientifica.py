@@ -10,10 +10,6 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
 
-# ==========================================
-# TRUQUE DE CAMINHO (Para achar o RF)
-# ==========================================
-
 CAMINHO_RAIZ = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 CAMINHO_BP = os.path.join(CAMINHO_RAIZ, 'backpropagation')
 CAMINHO_RF = os.path.join(CAMINHO_RAIZ, 'random_forest')
@@ -53,10 +49,11 @@ MODELO_MLP_PATH = "modelos_treinados/modelo_mlp_features_solda.pth"
 MODELO_RF_PATH = "modelos_treinados/modelo.joblib"
 MODELO_YOLO_PATH = "modelos_treinados/yolov8n_solda.pt" # <-- Caminho do YOLO
 
-LABELS_MACRO = ["Nível 1 a 4\n(Aceitável)", "Nível 5 a 10\n(Inaceitável)"]
+LABELS_YOLO = ["Metal Limpo\n(Sem Solda)", "Cordão Presente\n(Com Solda)"]
+LABELS_IA = ["Nível 1 a 4\n(Aceitável)", "Nível 5 a 10\n(Inaceitável)"]
 
 def ppm_para_macro(ppm):
-    """Traduz o PPM exato para as 3 Macro-Classes do projeto"""
+    """Traduz o PPM exato apenas para as 2 Macro-Classes da IA (Ignora o nível 0)"""
     if ppm <= 100: return 0
     else: return 1
 
@@ -84,11 +81,16 @@ def main():
         print(f"[ERRO] Nenhuma imagem encontrada na pasta: {PASTA_TESTES}")
         return
 
-    y_verdadeiro = []
+    # Listas do YOLO (Avalia TODAS as imagens)
+    y_verdadeiro_yolo = []
+    y_pred_yolo = []
+
+    # Listas da IA (Avalia APENAS imagens com solda)
+    y_verdadeiro_ia = []
     y_pred_mlp = []
     y_pred_rf = []
 
-    print(f"Analisando {len(caminhos)} imagens inéditas com YOLO...\n")
+    print(f"Analisando {len(caminhos)} imagens inéditas...\n")
 
     # 4. Loop de Inferência
     for caminho in caminhos:
@@ -96,27 +98,35 @@ def main():
         
         busca = re.search(r'g(\d+)-', nome_arquivo, re.IGNORECASE)
         if not busca:
-            print(f"[Aviso] Ignorando {nome_arquivo}")
             continue
             
         ppm_real = int(busca.group(1))
-        if ppm_real == 0:
-            continue
-        macro_real = ppm_para_macro(ppm_real)
-        
-        # Leitura da imagem bruta
         img_bruta = cv2.imread(caminho)
         
-        # --- O PULO DO GATO: CORTE DO YOLO ---
+        # ==========================================
+        # FASE 1: AVALIAÇÃO DO YOLO (DETECÇÃO)
+        # ==========================================
         _, recortes = yolo.detectar_e_recortar(img_bruta, padding_ratio=0.05)
         
-        if not recortes:
-            img_para_analise = img_bruta.copy()
-        else:
-            # Como é uma foto de validação unitária, pegamos o primeiro cordão detectado
-            img_para_analise = recortes[0]['imagem']
+        # Gabarito do YOLO: 0 se for g0, 1 se tiver PPM
+        y_verdadeiro_yolo.append(0 if ppm_real == 0 else 1)
+        # Previsão do YOLO: 0 se não gerou recorte, 1 se gerou
+        y_pred_yolo.append(0 if not recortes else 1)
 
-        # Processamento Ótico na imagem RECORTADA
+        # ==========================================
+        # FASE 2: AVALIAÇÃO DA IA (QUALIDADE)
+        # ==========================================
+        # Se for metal limpo (g0), a IA não precisa avaliar. Pulamos para a próxima foto.
+        if ppm_real == 0:
+            continue
+            
+        macro_real = ppm_para_macro(ppm_real)
+        y_verdadeiro_ia.append(macro_real)
+        
+        # Fallback: Se o YOLO falhou em achar a solda, mandamos a foto inteira para a IA não quebrar
+        img_para_analise = img_bruta.copy() if not recortes else recortes[0]['imagem']
+
+        # Processamento Ótico 
         img_melhorada = enhancer.enhance(img_para_analise)
         features_dict = extrator.extract(img_melhorada)
         lista_features = [features_dict[c] for c in extrator.FEATURE_COLUMNS]
@@ -128,71 +138,76 @@ def main():
             _, pred_mlp = torch.max(saida_mlp, 1)
             y_pred_mlp.append(pred_mlp.item())
 
-        # --- AVALIAÇÃO RANDOM FOREST (SOMA DE PROBABILIDADES) ---
+        # --- AVALIAÇÃO RANDOM FOREST ---
         probs_rf_originais = modelo_rf.predict_proba(features_dict)[0]
         probs_rf_macro = [0.0, 0.0] 
         
-        # O modelo .joblib tem 11 classes, precisamos agrupar nos 2 baldes!
         for idx, cls_label in enumerate(modelo_rf.classes_):
             try:
                 cls_val = int(cls_label)
-                if cls_val <= 100:
-                    probs_rf_macro[0] += probs_rf_originais[idx]
-                else:
-                    probs_rf_macro[1] += probs_rf_originais[idx]
+                if cls_val <= 100: probs_rf_macro[0] += probs_rf_originais[idx]
+                else: probs_rf_macro[1] += probs_rf_originais[idx]
             except ValueError:
                 pass
                 
-        # Agora sim a decisão será apenas 0 ou 1
         macro_pred_rf = int(np.argmax(probs_rf_macro))
         y_pred_rf.append(macro_pred_rf)
 
-        y_verdadeiro.append(macro_real)
-
+    # ==========================================
     # CÁLCULO DAS MÉTRICAS CIENTÍFICAS
     # ==========================================
-    acc_mlp = accuracy_score(y_verdadeiro, y_pred_mlp)
-    acc_rf = accuracy_score(y_verdadeiro, y_pred_rf)
-
     print("="*50)
-    print("MÉTRICAS DA REDE NEURAL (MLP)")
+    print("MÉTRICAS DO YOLO (DETECÇÃO DE OBJETO)")
     print("="*50)
-    print(f"Acurácia Global: {acc_mlp * 100:.2f}%")
-    print(classification_report(y_verdadeiro, y_pred_mlp, labels=[0, 1], target_names=[l.replace('\n', ' ') for l in LABELS_MACRO], zero_division=0))
+    print(f"Acurácia Global: {accuracy_score(y_verdadeiro_yolo, y_pred_yolo) * 100:.2f}%")
+    print(classification_report(y_verdadeiro_yolo, y_pred_yolo, target_names=[l.replace('\n', ' ') for l in LABELS_YOLO], zero_division=0))
 
     print("\n" + "="*50)
-    print("MÉTRICAS DO RANDOM FOREST")
+    print("MÉTRICAS DA REDE NEURAL (QUALIDADE)")
     print("="*50)
-    print(f"Acurácia Global: {acc_rf * 100:.2f}%")
-    print(classification_report(y_verdadeiro, y_pred_rf, labels=[0, 1], target_names=[l.replace('\n', ' ') for l in LABELS_MACRO], zero_division=0))
+    print(f"Acurácia Global: {accuracy_score(y_verdadeiro_ia, y_pred_mlp) * 100:.2f}%")
+    print(classification_report(y_verdadeiro_ia, y_pred_mlp, target_names=[l.replace('\n', ' ') for l in LABELS_IA], zero_division=0))
+
+    print("\n" + "="*50)
+    print("MÉTRICAS DO RANDOM FOREST (QUALIDADE)")
+    print("="*50)
+    print(f"Acurácia Global: {accuracy_score(y_verdadeiro_ia, y_pred_rf) * 100:.2f}%")
+    print(classification_report(y_verdadeiro_ia, y_pred_rf, target_names=[l.replace('\n', ' ') for l in LABELS_IA], zero_division=0))
 
     # ==========================================
-    # GERAÇÃO DAS MATRIZES DE CONFUSÃO (GRÁFICOS)
+    # GERAÇÃO DO PAINEL DE MATRIZES (1x3)
     # ==========================================
-    # As matrizes agora são 2x2 (Binárias)
-    matriz_mlp = confusion_matrix(y_verdadeiro, y_pred_mlp, labels=[0, 1])
-    matriz_rf = confusion_matrix(y_verdadeiro, y_pred_rf, labels=[0, 1])
+    matriz_yolo = confusion_matrix(y_verdadeiro_yolo, y_pred_yolo, labels=[0, 1])
+    matriz_mlp = confusion_matrix(y_verdadeiro_ia, y_pred_mlp, labels=[0, 1])
+    matriz_rf = confusion_matrix(y_verdadeiro_ia, y_pred_rf, labels=[0, 1])
 
-    fig, eixos = plt.subplots(1, 2, figsize=(14, 6))
+    fig, eixos = plt.subplots(1, 3, figsize=(20, 6))
 
-    # Plot MLP
-    sns.heatmap(matriz_mlp, annot=True, fmt='d', cmap='Blues', ax=eixos[0], cbar=False,
-                xticklabels=LABELS_MACRO, yticklabels=LABELS_MACRO, annot_kws={"size": 14})
-    eixos[0].set_title('Rede Neural (MLP) - Matriz de Confusão', fontsize=14, pad=15)
-    eixos[0].set_xlabel('Previsão da IA', fontsize=12)
-    eixos[0].set_ylabel('Gabarito Real (PPM)', fontsize=12)
+    # Plot YOLO (Matriz de Detecção)
+    sns.heatmap(matriz_yolo, annot=True, fmt='d', cmap='Oranges', ax=eixos[0], cbar=False,
+                xticklabels=LABELS_YOLO, yticklabels=LABELS_YOLO, annot_kws={"size": 15})
+    eixos[0].set_title('YOLOv8 - Matriz de Detecção', fontsize=15, pad=15)
+    eixos[0].set_xlabel('Previsão do YOLO', fontsize=12)
+    eixos[0].set_ylabel('Gabarito Real', fontsize=12)
 
-    # Plot RF
-    sns.heatmap(matriz_rf, annot=True, fmt='d', cmap='Greens', ax=eixos[1], cbar=False,
-                xticklabels=LABELS_MACRO, yticklabels=LABELS_MACRO, annot_kws={"size": 14})
-    eixos[1].set_title('Random Forest - Matriz de Confusão', fontsize=14, pad=15)
+    # Plot MLP (Matriz de Classificação)
+    sns.heatmap(matriz_mlp, annot=True, fmt='d', cmap='Blues', ax=eixos[1], cbar=False,
+                xticklabels=LABELS_IA, yticklabels=LABELS_IA, annot_kws={"size": 15})
+    eixos[1].set_title('Rede Neural (MLP) - Matriz de Qualidade', fontsize=15, pad=15)
     eixos[1].set_xlabel('Previsão da IA', fontsize=12)
     eixos[1].set_ylabel('Gabarito Real (PPM)', fontsize=12)
+
+    # Plot RF (Matriz de Classificação)
+    sns.heatmap(matriz_rf, annot=True, fmt='d', cmap='Greens', ax=eixos[2], cbar=False,
+                xticklabels=LABELS_IA, yticklabels=LABELS_IA, annot_kws={"size": 15})
+    eixos[2].set_title('Random Forest - Matriz de Qualidade', fontsize=15, pad=15)
+    eixos[2].set_xlabel('Previsão da IA', fontsize=12)
+    eixos[2].set_ylabel('Gabarito Real (PPM)', fontsize=12)
 
     plt.tight_layout()
     caminho_grafico = "dados_estatisticos/comparativo_matrizes_confusao.png"
     plt.savefig(caminho_grafico, dpi=300, bbox_inches='tight')
-    print(f"\n[SUCESSO] Gráfico de alta resolução salvo em: '{caminho_grafico}'")
+    print(f"\n[SUCESSO] Painel estatístico salvo em: '{caminho_grafico}'")
     plt.show()
 
 if __name__ == "__main__":
