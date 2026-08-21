@@ -150,8 +150,13 @@ def main():
         # --- AVALIAÇÃO MLP ---
         with torch.no_grad():
             saida_mlp = modelo_mlp(tensor_feat)
-            _, pred_mlp = torch.max(saida_mlp, 1)
-            y_pred_mlp.append(pred_mlp.item())
+            probs_mlp = torch.nn.functional.softmax(saida_mlp, dim=1)[0]
+            probabilidade_ruim = probs_mlp[1].item()
+            LIMITE_CORTE = 0.30  # 30%
+            if probabilidade_ruim >= LIMITE_CORTE:
+                y_pred_mlp.append(1) # Reprova a solda
+            else:
+                y_pred_mlp.append(0) # Aceita a solda
 
         # --- AVALIAÇÃO RANDOM FOREST ---
         probs_rf_originais = modelo_rf.predict_proba(features_dict)[0]
