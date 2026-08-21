@@ -152,7 +152,7 @@ if __name__ == "__main__":
     print(f"Dataset: {tamanho_treino} amostras de Treino | {tamanho_val} amostras de Validação.")
 
     modelo = MLPSolda(input_size=6, num_classes=NUM_CLASSES).to(device)
-    criterio = nn.CrossEntropyLoss()
+    criterio = nn.CrossEntropyLoss(label_smoothing=0.01)
     otimizador = optim.Adam(modelo.parameters(), lr=LEARNING_RATE, weight_decay=1e-3) # Aumentado o peso da regularização
 
     pasta_modelos = "D:/Lages/Detector_De_Solda/modelos_treinados"

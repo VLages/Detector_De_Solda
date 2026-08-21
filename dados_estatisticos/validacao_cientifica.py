@@ -152,7 +152,7 @@ def main():
             saida_mlp = modelo_mlp(tensor_feat)
             probs_mlp = torch.nn.functional.softmax(saida_mlp, dim=1)[0]
             probabilidade_ruim = probs_mlp[1].item()
-            LIMITE_CORTE = 0.30  # 30%
+            LIMITE_CORTE = 0.0001
             if probabilidade_ruim >= LIMITE_CORTE:
                 y_pred_mlp.append(1) # Reprova a solda
             else:
@@ -204,22 +204,22 @@ def main():
     fig, eixos = plt.subplots(1, 3, figsize=(20, 6))
 
     # Plot YOLO (Matriz de Detecção)
-    sns.heatmap(matriz_yolo, annot=True, fmt='d', cmap='Oranges', ax=eixos[0], cbar=False,
-                xticklabels=LABELS_YOLO, yticklabels=LABELS_YOLO, annot_kws={"size": 15})
+    sns.heatmap(matriz_yolo, annot=True, fmt='d', cmap='Greys', ax=eixos[0], cbar=False,
+                xticklabels=LABELS_YOLO, yticklabels=LABELS_YOLO, annot_kws={"size": 24})
     eixos[0].set_title('YOLOv8 - Matriz de Detecção', fontsize=15, pad=15)
     eixos[0].set_xlabel('Previsão do YOLO', fontsize=12)
     eixos[0].set_ylabel('Gabarito Real', fontsize=12)
 
     # Plot MLP (Matriz de Classificação)
-    sns.heatmap(matriz_mlp, annot=True, fmt='d', cmap='Blues', ax=eixos[1], cbar=False,
-                xticklabels=LABELS_IA, yticklabels=LABELS_IA, annot_kws={"size": 15})
+    sns.heatmap(matriz_mlp, annot=True, fmt='d', cmap='Greys', ax=eixos[1], cbar=False,
+                xticklabels=LABELS_IA, yticklabels=LABELS_IA, annot_kws={"size": 24})
     eixos[1].set_title('Rede Neural (MLP) - Matriz de Qualidade', fontsize=15, pad=15)
     eixos[1].set_xlabel('Previsão da IA', fontsize=12)
     eixos[1].set_ylabel('Gabarito Real (PPM)', fontsize=12)
 
     # Plot RF (Matriz de Classificação)
-    sns.heatmap(matriz_rf, annot=True, fmt='d', cmap='Greens', ax=eixos[2], cbar=False,
-                xticklabels=LABELS_IA, yticklabels=LABELS_IA, annot_kws={"size": 15})
+    sns.heatmap(matriz_rf, annot=True, fmt='d', cmap='Greys', ax=eixos[2], cbar=False,
+                xticklabels=LABELS_IA, yticklabels=LABELS_IA, annot_kws={"size": 24})
     eixos[2].set_title('Random Forest - Matriz de Qualidade', fontsize=15, pad=15)
     eixos[2].set_xlabel('Previsão da IA', fontsize=12)
     eixos[2].set_ylabel('Gabarito Real (PPM)', fontsize=12)
