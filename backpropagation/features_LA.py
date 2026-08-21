@@ -22,7 +22,10 @@ class FeaturesLA:
         "pct_cinza", 
         "pct_marrom", 
         "h_mean", 
-        "h_std"
+        "h_std",
+        #"pct_amarelo_palha",
+        #"saturacao",
+        #"valor"
     ]
 
     def __init__(

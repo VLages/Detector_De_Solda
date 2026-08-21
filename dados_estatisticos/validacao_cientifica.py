@@ -4,6 +4,7 @@ import glob
 import re
 import cv2
 import torch
+import pickle
 import torch.nn as nn
 import numpy as np
 import matplotlib.pyplot as plt
@@ -30,17 +31,19 @@ class MLPSolda(nn.Module):
     def __init__(self, input_size=6, num_classes=2):
         super(MLPSolda, self).__init__()
         self.rede = nn.Sequential(
-            nn.Linear(input_size, 32),
+            nn.Linear(input_size, 16), 
+            nn.BatchNorm1d(16),
+            nn.ReLU(),                 
+            nn.Dropout(0.3),           
+            
+            nn.Linear(16, 8),         
             nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(32, 16),
-            nn.ReLU(),
-            nn.Linear(16, num_classes)
+            
+            nn.Linear(8, num_classes) 
         )
 
     def forward(self, x):
         return self.rede(x)
-
 # ==========================================
 # CONFIGURAÇÕES DE CAMINHO
 # ==========================================
@@ -72,6 +75,10 @@ def main():
     modelo_mlp = MLPSolda(input_size=6, num_classes=2).to(device)
     modelo_mlp.load_state_dict(torch.load(MODELO_MLP_PATH, map_location=device, weights_only=True))
     modelo_mlp.eval()
+
+    caminho_scaler = os.path.join(CAMINHO_RAIZ, "modelos_treinados", "scaler.pkl")
+    with open(caminho_scaler, "rb") as f:
+        scaler = pickle.load(f)
     
     modelo_rf = QualityClassification.load(MODELO_RF_PATH)
 
@@ -129,10 +136,18 @@ def main():
         # Processamento Ótico 
         img_melhorada = enhancer.enhance(img_para_analise)
         features_dict = extrator.extract(img_melhorada)
-        lista_features = [features_dict[c] for c in extrator.FEATURE_COLUMNS]
+        
+        # 1. Garante que vai extrair apenas as 6 primeiras features (como no treino)
+        lista_features = [features_dict[c] for c in extrator.FEATURE_COLUMNS[:6]]
+
+        # 2. Aplica a padronização do treino usando o Scaler
+        features_normalizadas = scaler.transform([lista_features])
+        
+        # 3. Transforma em Tensor (Sem dividir por 100.0)
+        tensor_feat = torch.tensor(features_normalizadas, dtype=torch.float32).to(device)
+        # -------------------------
 
         # --- AVALIAÇÃO MLP ---
-        tensor_feat = torch.tensor(lista_features, dtype=torch.float32).unsqueeze(0).to(device) / 100.0
         with torch.no_grad():
             saida_mlp = modelo_mlp(tensor_feat)
             _, pred_mlp = torch.max(saida_mlp, 1)

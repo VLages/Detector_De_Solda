@@ -5,7 +5,7 @@ import torch
 import random
 import re             # <--- ADICIONE ESTA LINHA AQUI
 import numpy as np
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import Dataset
 import torchvision.transforms as transforms
 
 # ==========================================
@@ -89,13 +89,13 @@ class FusionWeldAugmentation:
         return cv2.resize(crop, (w, h), interpolation=cv2.INTER_LINEAR)
 
     # ------------------------------------------
-    # MOTOR DE FUSÃO
+    # MOTOR DE FUSÃO (Modificado para preservar HSV)
     # ------------------------------------------
     def augment(self, img: np.ndarray, base_seed: int = 0) -> list:
         rng = np.random.default_rng(self.seed + base_seed)
         variants = []
         
-        # Para cada recorte na solda, geramos 8 variações unindo as duas lógicas
+        # Para cada recorte na solda, geramos variações estritamente geométricas
         for _ in range(self.n_crops):
             # 1. Base geométrica (Recorte focado, igual a versão 1)
             base_crop = self._random_crop(img)
@@ -217,13 +217,36 @@ if __name__ == "__main__":
                 print(f" -> [Aviso] Arquivo ignorado: '{nome_arquivo}' (Nenhum PPM reconhecido no nome).")
 
     print(f"\nTotal de imagens originais unificadas: {len(imagens_base)}")
+    
+    # --- NOVO BLOCO: OVERSAMPLING DE CLASSES ---
+    from collections import Counter
+    contagem = Counter(labels_base)
+    max_amostras = max(contagem.values()) # Encontra a classe com mais imagens (6)
+    
+    imagens_balanceadas = []
+    labels_balanceados = []
+    
+    for classe_alvo in contagem.keys():
+        # Separa as imagens que pertencem apenas a esta classe
+        imgs_classe = [img for img, lbl in zip(imagens_base, labels_base) if lbl == classe_alvo]
+        
+        # Multiplica a lista de imagens minoritárias para igualar a classe majoritária
+        multiplicador = max_amostras // len(imgs_classe)
+        resto = max_amostras % len(imgs_classe)
+        
+        imagens_balanceadas.extend(imgs_classe * multiplicador)
+        imagens_balanceadas.extend(imgs_classe[:resto])
+        labels_balanceados.extend([classe_alvo] * max_amostras)
+
+    print(f"Balanceamento base concluído: {Counter(labels_balanceados)}")
+    # -------------------------------------------
+
     print("Executando a FUSÃO de Data Augmentation (Isso pode demorar um pouco)...")
     
-    # 10 recortes x 8 variantes = 80 imagens por original
     aug_fusion = FusionWeldAugmentation(n_crops_per_image=10)
-    imgs_aumentadas, labels_aumentados = aug_fusion.augment_dataset(imagens_base, labels_base)
+    # Passa as listas recém-balanceadas no lugar das originais
+    imgs_aumentadas, labels_aumentados = aug_fusion.augment_dataset(imagens_balanceadas, labels_balanceados)
     
-    # Define o novo diretório de destino na nova subpasta solicitada
     pasta_saida = "D:/Lages/Detector_De_Solda/backpropagation/imagens_geradas"
     os.makedirs(pasta_saida, exist_ok=True)
     

@@ -4,6 +4,7 @@ import glob
 import re
 import cv2
 import torch
+import pickle
 import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
@@ -32,12 +33,13 @@ class MLPSolda(nn.Module):
     def __init__(self, input_size=6, num_classes=2):
         super(MLPSolda, self).__init__()
         self.rede = nn.Sequential(
-            nn.Linear(input_size, 32),
+            nn.Linear(input_size, 16), 
+            nn.BatchNorm1d(16),
+            nn.ReLU(),                 
+            nn.Dropout(0.3),           
+            nn.Linear(16, 8),         
             nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(32, 16),
-            nn.ReLU(),
-            nn.Linear(16, num_classes)
+            nn.Linear(8, num_classes) 
         )
 
     def forward(self, x):
@@ -72,6 +74,9 @@ def main():
     
     modelo_rf = QualityClassification.load(MODELO_RF_PATH)
 
+    with open("modelos_treinados/scaler.pkl", "rb") as f:
+        scaler = pickle.load(f)
+
     caminhos = glob.glob(os.path.join(PASTA_TESTES, "*.png")) + glob.glob(os.path.join(PASTA_TESTES, "*.jpg"))
     
     y_verdadeiro = []
@@ -100,11 +105,15 @@ def main():
 
         # Probabilidades MLP
         tensor_feat = torch.tensor(lista_features, dtype=torch.float32).unsqueeze(0).to(device) / 100.0
+
+        features_escalonadas = scaler.transform([lista_features])
+        tensor_feat = torch.tensor(features_escalonadas, dtype=torch.float32).to(device)
+        
         with torch.no_grad():
             saida_mlp = modelo_mlp(tensor_feat)
             probs_mlp = F.softmax(saida_mlp, dim=1)[0].cpu().numpy()
             probabilidades_mlp.append(probs_mlp)
-
+            
         # Probabilidades RF (Traduzindo as 11 classes originais para as 2 Macro)
         probs_rf_originais = modelo_rf.predict_proba(features_dict)[0]
         probs_rf_macro = [0.0, 0.0]
