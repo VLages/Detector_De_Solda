@@ -29,7 +29,7 @@ class ExtratorCordaoYOLO:
             return img, []
 
         # 1. Inferência do YOLO
-        resultados = self.model(img, verbose=False, conf=0.85)
+        resultados = self.model(img, verbose=False, conf=0.30)
         caixas = resultados[0].boxes
         
         if len(caixas) == 0:
