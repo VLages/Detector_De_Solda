@@ -10,6 +10,9 @@ features_base.csv
 comparativo_curvas_roc.png
 comparativo_matrizes_confusao.png
 comparativo_importancia_variaveis.png
+matriz_confusao_BP.png
+matriz_confusao_RF.png
+matriz_confusao_yolo.png
 backpropagation/imagens_geradas/
 aug_*.png
 banco_de_dados/

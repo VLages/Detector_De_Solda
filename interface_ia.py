@@ -3,6 +3,7 @@ import sys
 import cv2
 import numpy as np
 import torch
+import pickle
 import torch.nn as nn
 import torch.nn.functional as F
 from PIL import Image, ImageTk
@@ -32,21 +33,24 @@ from random_forest.quality_classification import QualityClassification
 # ==========================================
 # ARQUITETURA DA REDE MLP
 # ==========================================
+# ==========================================
+# ARQUITETURA DA REDE MLP (Sincronizada)
+# ==========================================
 class MLPSolda(nn.Module):
     def __init__(self, input_size=6, num_classes=2):
         super(MLPSolda, self).__init__()
         self.rede = nn.Sequential(
-            nn.Linear(input_size, 32),
+            nn.Linear(input_size, 16), 
+            nn.BatchNorm1d(16),
+            nn.ReLU(),                 
+            nn.Dropout(0.3),           
+            nn.Linear(16, 8),         
             nn.ReLU(),
-            nn.Dropout(0.2),
-            nn.Linear(32, 16),
-            nn.ReLU(),
-            nn.Linear(16, num_classes)
+            nn.Linear(8, num_classes) 
         )
 
     def forward(self, x):
         return self.rede(x)
-
 # ==========================================
 # CAMINHOS E CONFIGURAÇÕES
 # ==========================================
@@ -191,6 +195,16 @@ class GUI:
                 print("Modelo Random Forest carregado com sucesso!")
             except Exception as e:
                 messagebox.showerror("Erro no Random Forest", f"Erro ao carregar o modelo:\n{e}")
+
+        # Carrega o Normalizador Matemático (Scaler)
+        caminho_scaler = "modelos_treinados/scaler.pkl"
+        if os.path.exists(caminho_scaler):
+            with open(caminho_scaler, "rb") as f:
+                self.scaler = pickle.load(f)
+            print("Scaler matemático carregado com sucesso!")
+        else:
+            self.scaler = None
+            messagebox.showwarning("Aviso", "Arquivo scaler.pkl não encontrado. A MLP pode falhar.")        
 
     def _card(self, parent, title, accent_top=False):
         outer = tk.Frame(parent, bg=BG_CARD, highlightbackground=BORDER, highlightthickness=1)
@@ -515,19 +529,28 @@ class GUI:
             
             # --- 2A. AVALIAÇÃO DA REDE NEURAL (MLP) ---
             classe_mlp, conf_mlp = 0, 0.0
-            probs_mlp = [0.0, 0.0, 0.0]
-            if self.modelo_mlp is not None:
-                lista_valores = [row[col] for col in self.features.FEATURE_COLUMNS]
-                tensor_features = torch.tensor(lista_valores, dtype=torch.float32).unsqueeze(0) / 100.0
-                tensor_features = tensor_features.to(self.device)
-                
+            probs_mlp = [0.0, 0.0]
+            
+            if self.modelo_mlp is not None and self.scaler is not None:
+                # 1. Garante que vai extrair apenas as 6 primeiras features (como no treino)
+                lista_valores = [row[col] for col in self.features.FEATURE_COLUMNS[:6]]
+                # 2. Aplica a padronização matemática
+                features_normalizadas = self.scaler.transform([lista_valores])
+                # 3. Transforma em Tensor
+                tensor_features = torch.tensor(features_normalizadas, dtype=torch.float32).to(self.device)
                 with torch.no_grad():
                     saida = self.modelo_mlp(tensor_features)
-                    prob_mlp_tensor = F.softmax(saida, dim=1)[0]
-                    confianca, classe_prevista = torch.max(prob_mlp_tensor, 0)
-                    
-                classe_mlp = classe_prevista.item()
-                conf_mlp = confianca.item()
+                    prob_mlp_tensor = torch.nn.functional.softmax(saida, dim=1)[0]
+                    # Probabilidade bruta da solda ser Inaceitável
+                    probabilidade_ruim = prob_mlp_tensor[1].item()
+                    LIMITE_CORTE = 0.0001
+                    if probabilidade_ruim >= LIMITE_CORTE:
+                        classe_mlp = 1
+                        conf_mlp = probabilidade_ruim # A interface mostra a certeza do erro
+                    else:
+                        classe_mlp = 0
+                        conf_mlp = prob_mlp_tensor[0].item() # A interface mostra a certeza do acerto
+                        
                 probs_mlp = prob_mlp_tensor.tolist()
 
             # --- 2B. AVALIAÇÃO DO RANDOM FOREST ---

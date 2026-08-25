@@ -61,7 +61,7 @@ def main():
     plt.figure(figsize=(10, 6))
     
     # Usa uma paleta de cores acadêmica (cinza para o menos importante, azul/vermelho para os destaques)
-    ax = sns.barplot(x='Importância (Gini)', y='Parâmetro Visual (HSV)', data=df_importancia, palette='viridis')
+    ax = sns.barplot(x='Importância (Gini)', y='Parâmetro Visual (HSV)', data=df_importancia, palette='Greys_r')
 
     plt.title('Importância das Variáveis Extraídas (Random Forest)', fontsize=16, pad=15)
     plt.xlabel('Peso de Decisão (Gini Importance)', fontsize=14)
